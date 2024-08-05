@@ -23,24 +23,6 @@ PDF Image Extractor is a Python-based application that allows users to extract i
   - `pymupdf`
   - `Pillow`
 
-## Installation
-
-1. **Clone the repository**:
-    ```sh
-    git clone https://github.com/yourusername/PDF_Image_Extractor.git
-    cd PDF_Image_Extractor
-    ```
-
-2. **Install the required libraries**:
-    ```sh
-    pip install -r requirements.txt
-    ```
-
-3. **Run the application**:
-    ```sh
-    python PDF_Image_Extractor.py
-    ```
-
 ## Usage
 
 1. **Launch the Application**: Run the `PDF_Image_Extractor.exe` file to open the GUI.
