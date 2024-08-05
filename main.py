@@ -1,7 +1,6 @@
 import os
 import io
 
-import fitz
 import pymupdf
 import tkinter as tk
 from tkinter import filedialog
@@ -17,7 +16,7 @@ file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
 
 # Create thumbnail sheet of contained images that are not masks, sorted by size in KB, labeled by size in KB
 if file_path:
-    doc = fitz.open(file_path)  # open the selected PDF document
+    doc = pymupdf.open(file_path)  # open the selected PDF document
 
     pdf_directory = os.path.dirname(file_path)
 
