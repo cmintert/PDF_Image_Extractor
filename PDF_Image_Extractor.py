@@ -86,54 +86,70 @@ class PDFImageExtractorGUI:
         self.master.rowconfigure(4, weight=1)
 
     def browse_file(self):
-        file_path = self.extractor.select_pdf_file()
-        if file_path:
-            self.file_path.set(file_path)
-            self.log("PDF file selected: " + file_path)
-            # Set default output folder
-            default_output = os.path.join(os.path.dirname(file_path),
-                                          f"extracted_img_from_{os.path.basename(file_path)}")
-            self.output_path.set(default_output)
-            self.log(f"Default output folder set to: {default_output}")
+        try:
+            file_path = self.extractor.select_pdf_file()
+            if file_path:
+                self.file_path.set(file_path)
+                self.log("PDF file selected: " + file_path)
+                # Set default output folder
+                default_output = os.path.join(os.path.dirname(file_path),
+                                              f"extracted_img_from_{os.path.basename(file_path)}")
+                self.output_path.set(default_output)
+                self.log(f"Default output folder set to: {default_output}")
+        except Exception as e:
+            self.log(f"Error selecting PDF file: {str(e)}")
 
     def browse_output_folder(self):
-        folder_path = filedialog.askdirectory()
-        if folder_path:
-            self.output_path.set(folder_path)
-            self.log(f"Output folder selected: {folder_path}")
+        try:
+            folder_path = filedialog.askdirectory()
+            if folder_path:
+                self.output_path.set(folder_path)
+                self.log(f"Output folder selected: {folder_path}")
+        except Exception as e:
+            self.log(f"Error selecting output folder: {str(e)}")
 
     def create_preview(self):
         if not self.file_path.get():
             self.log("Error: Please select a PDF file first.")
             return
 
-        self.log("Creating thumbnail preview...")
-        thumbnail_sheet = self.extractor.create_thumbnail_preview()
-        self.log("Thumbnail sheet created at: " + thumbnail_sheet)
-        os.startfile(thumbnail_sheet)
+        try:
+            self.log("Creating thumbnail preview...")
+            thumbnail_sheet = self.extractor.create_thumbnail_preview()
+            self.log("Thumbnail sheet created at: " + thumbnail_sheet)
+            os.startfile(thumbnail_sheet)
+        except Exception as e:
+            self.log(f"Error creating thumbnail preview: {str(e)}")
 
     def extract_images(self):
         if not self.file_path.get():
             self.log("Error: Please select a PDF file first.")
+
             return
 
-        threshold = self.threshold.get()
-        if threshold <= 0:
-            self.log("Error: Please enter a valid threshold (positive integer).")
-            return
+        try:
+            threshold = self.threshold.get()
+            if threshold <= 0:
+                raise ValueError("Threshold must be a positive integer.")
 
-        output_folder = self.output_path.get()
-        if not output_folder:
-            self.log("Error: Please select an output folder.")
-            return
+            output_folder = self.output_path.get()
+            if not output_folder:
+                raise ValueError("Please select an output folder.")
 
-        self.extractor.threshold = threshold
-        self.extractor.output_folder = output_folder
-        self.log(f"Extracting images with threshold: {threshold} KB")
-        self.log(f"Output folder: {output_folder}")
-        self.extractor.extract_and_save_images()
-        self.log("Image extraction completed.")
-        self.log(f"Images have been extracted to: {self.extractor.output_folder}")
+            self.extractor.threshold = threshold
+            self.extractor.output_folder = output_folder
+            self.log(f"Extracting images with threshold: {threshold} KB")
+            self.log(f"Output folder: {output_folder}")
+            self.extractor.extract_and_save_images()
+            self.log("Image extraction completed.")
+            self.log(f"Images have been extracted to: {self.extractor.output_folder}")
+
+        except ValueError as ve:
+            self.log(f"Error: {str(ve)}")
+
+        except Exception as e:
+            self.log(f"Error extracting images: {str(e)}")
+
 
     def log(self, message):
         self.log_text.insert(tk.END, message + "\n")
@@ -151,21 +167,32 @@ class PDFImageExtractor:
     def select_pdf_file(self) -> str:
         self.pdf_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
         if self.pdf_path:
+            if not os.path.isfile(self.pdf_path):
+                raise FileNotFoundError(f"The selected file does not exist: {self.pdf_path}")
             self.pdf_directory = os.path.dirname(self.pdf_path)
             self.pdf_name = os.path.basename(self.pdf_path)
         return self.pdf_path
 
     def extract_images(self) -> List[Tuple[bytes, float]]:
+        if not self.pdf_path:
+            raise ValueError("No PDF file selected.")
+
         extracted_images = []
-        with pymupdf.open(self.pdf_path) as doc:
-            for page in doc:
-                image_list = page.get_images(full=True)
-                for img in image_list:
-                    xref = img[0]
-                    base_image = doc.extract_image(xref)
-                    image_bytes = base_image["image"]
-                    image_size = len(image_bytes) / 1024  # size in KB
-                    extracted_images.append((image_bytes, image_size))
+        try:
+            with pymupdf.open(self.pdf_path) as doc:
+                for page in doc:
+                    image_list = page.get_images(full=True)
+                    for img in image_list:
+                        xref = img[0]
+                        base_image = doc.extract_image(xref)
+                        image_bytes = base_image["image"]
+                        image_size = len(image_bytes) / 1024  # size in KB
+                        extracted_images.append((image_bytes, image_size))
+        except pymupdf.fitz.FileDataError as e:
+            raise ValueError(f"Error reading PDF file: {str(e)}")
+        except Exception as e:
+            raise RuntimeError(f"Unexpected error extracting images: {str(e)}")
+
         return extracted_images
 
     def sort_images_by_size(self, images: List[Tuple[bytes, float]]) -> List[Tuple[Image.Image, float]]:
@@ -178,10 +205,15 @@ class PDFImageExtractor:
                 img.thumbnail((100, 100))  # Creating a thumbnail
                 thumbnails.append((img, size))
             except OSError as e:
-                pass
+                print(f"Warning: Failed to process an image: {str(e)}")
+            except Exception as e:
+                print(f"Unexpected error processing an image: {str(e)}")
         return thumbnails
 
     def create_thumb_sheet(self, images: List[Tuple[Image.Image, float]]) -> str:
+        if not images:
+            raise ValueError("No images to create thumbnail sheet.")
+
         thumb_width, thumb_height = 100, 100
         max_thumbs_per_row = 10
 
@@ -205,57 +237,84 @@ class PDFImageExtractor:
             draw.text((x_offset, y_offset + thumb_height + 5), f"{size:.2f} KB", fill="white", font=font)
 
         thumbnail_sheet_path = os.path.join(self.pdf_directory, "thumbnail_sheet.png")
-        sheet.save(thumbnail_sheet_path)
+        try:
+            sheet.save(thumbnail_sheet_path)
+        except Exception as e:
+            raise IOError(f"Failed to save thumbnail sheet: {str(e)}")
         return thumbnail_sheet_path
 
     def create_thumbnail_preview(self):
+        if not self.pdf_path:
+            raise ValueError("No PDF file selected.")
+
         extracted_images = self.extract_images()
         sorted_images = self.sort_images_by_size(extracted_images)
         return self.create_thumb_sheet(sorted_images)
 
     def extract_and_save_images(self):
-        os.makedirs(self.output_folder, exist_ok=True)
-        with pymupdf.open(self.pdf_path) as doc:
-            for page_index in range(len(doc)):
-                self.process_page(doc, page_index)
+        if not self.pdf_path:
+            raise ValueError("No PDF file selected.")
+        if not self.output_folder:
+            raise ValueError("No output folder specified.")
+
+        try:
+            os.makedirs(self.output_folder, exist_ok=True)
+        except OSError as e:
+            raise IOError(f"Failed to create output folder: {str(e)}")
+
+        try:
+            with pymupdf.open(self.pdf_path) as doc:
+                for page_index in range(len(doc)):
+                    self.process_page(doc, page_index)
+        except pymupdf.fitz.FileDataError as e:
+            raise ValueError(f"Error reading PDF file: {str(e)}")
+        except Exception as e:
+            raise RuntimeError(f"Unexpected error processing PDF: {str(e)}")
 
     def process_page(self, doc: pymupdf.Document, page_index: int):
         page = doc[page_index]
         image_list = page.get_images()
 
         for image_index, img in enumerate(image_list, start=1):
-            self.process_image(doc, page_index, image_index, img)
+            try:
+                self.process_image(doc, page_index, image_index, img)
+            except Exception as e:
+                print(f"Warning: Failed to process image {image_index} on page {page_index}: {str(e)}")
 
     def process_image(self, doc: pymupdf.Document, page_index: int, image_index: int, img: Tuple):
-
         xref, smask = img[0], img[1]
-        image_bytes = doc.extract_image(xref)["image"]
-        img_size = len(image_bytes) / 1024
+        try:
+            image_bytes = doc.extract_image(xref)["image"]
+            img_size = len(image_bytes) / 1024
 
+            if img_size < self.threshold:
+                return
 
-        if img_size < self.threshold:
-
-            return
-
-        self.save_image(doc, xref, smask, page_index, image_index)
+            self.save_image(doc, xref, smask, page_index, image_index)
+        except Exception as e:
+            raise RuntimeError(f"Failed to process image: {str(e)}")
 
     def save_image(self, doc: pymupdf.Document, xref: int, smask: int, page_index: int, image_index: int):
-        pix = self.create_pixmap(doc, xref, smask)
-        output_path = os.path.join(self.output_folder, f"page_{page_index}-image_{image_index}.png")
-        pix.save(output_path)
+        try:
+            pix = self.create_pixmap(doc, xref, smask)
+            output_path = os.path.join(self.output_folder, f"page_{page_index}-image_{image_index}.png")
+            pix.save(output_path)
+        except Exception as e:
+            raise IOError(f"Failed to save image: {str(e)}")
 
     def create_pixmap(self, doc: pymupdf.Document, xref: int, smask: int) -> pymupdf.Pixmap:
-        pix1 = pymupdf.Pixmap(doc.extract_image(xref)["image"])
-        if smask > 0:
-
-            mask = pymupdf.Pixmap(doc.extract_image(smask)["image"])
-            return pymupdf.Pixmap(pix1, mask)
-        return pix1
-
+        try:
+            pix1 = pymupdf.Pixmap(doc.extract_image(xref)["image"])
+            if smask > 0:
+                mask = pymupdf.Pixmap(doc.extract_image(smask)["image"])
+                return pymupdf.Pixmap(pix1, mask)
+            return pix1
+        except Exception as e:
+            raise RuntimeError(f"Failed to create pixmap: {str(e)}")
 
 def main():
     root = tk.Tk()
-    app = PDFImageExtractorGUI(root)
+    _ = PDFImageExtractorGUI(root)
     root.mainloop()
 
 
