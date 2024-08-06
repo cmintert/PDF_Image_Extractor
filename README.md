@@ -24,7 +24,7 @@ PDF Image Extractor is a Python-based application that allows users to extract i
   - `tkinter`
   - `pymupdf`
   - `Pillow`
-  - 
+  
 ## Contributing
 
 Contributions are welcome! Please fork the repository and submit pull requests for any enhancements or bug fixes.
