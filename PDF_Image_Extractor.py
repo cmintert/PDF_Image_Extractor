@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog
 from typing import List, Tuple, Dict
 import pymupdf
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageTk
 import imagehash
 
 class PDFImageExtractorGUI:
@@ -18,9 +18,12 @@ class PDFImageExtractorGUI:
         self.create_widgets()
 
     def create_widgets(self):
+        # Main content frame
+        self.main_frame = ttk.Frame(self.master)
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
 
         # File selection
-        self.file_frame = ttk.Frame(self.master, padding="10")
+        self.file_frame = ttk.Frame(self.main_frame, padding="10")
         self.file_frame.grid(row=0, column=0, sticky=(tk.W, tk.E))
 
         self.file_label = ttk.Label(self.file_frame, text="Selected PDF:")
@@ -38,7 +41,7 @@ class PDFImageExtractorGUI:
         self.browse_button.grid(row=0, column=2)
 
         # Output folder selection
-        self.output_frame = ttk.Frame(self.master, padding="10")
+        self.output_frame = ttk.Frame(self.main_frame, padding="10")
         self.output_frame.grid(row=1, column=0, sticky=(tk.W, tk.E))
 
         self.output_label = ttk.Label(self.output_frame, text="Output Folder:")
@@ -55,11 +58,34 @@ class PDFImageExtractorGUI:
         )
         self.output_browse_button.grid(row=0, column=2)
 
+        # Options frame
+        self.options_frame = ttk.LabelFrame(self.main_frame, text="Options", padding="10")
+        self.options_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), padx=10, pady=5)
 
+        self.option_vars = {}
+        for i, (option, default) in enumerate(self.extractor.options.items()):
+            var = tk.BooleanVar(value=default)
+            self.option_vars[option] = var
+            ttk.Checkbutton(
+                self.options_frame,
+                text=option.replace('_', ' ').title(),
+                variable=var,
+                command=self.update_options
+            ).grid(row=i, column=0, sticky=tk.W)
+
+        # Threshold setting
+        self.threshold_label = ttk.Label(self.options_frame, text="Threshold (KB):")
+        self.threshold_label.grid(row=len(self.extractor.options), column=0, sticky=tk.W)
+
+        self.threshold = tk.IntVar(value=0)
+        self.threshold_entry = ttk.Entry(
+            self.options_frame, textvariable=self.threshold, width=10
+        )
+        self.threshold_entry.grid(row=len(self.extractor.options), column=1, padx=5)
 
         # Action buttons
-        self.button_frame = ttk.Frame(self.master, padding="10")
-        self.button_frame.grid(row=2, column=0, sticky=(tk.W, tk.E))
+        self.button_frame = ttk.Frame(self.main_frame, padding="10")
+        self.button_frame.grid(row=3, column=0, sticky=(tk.W, tk.E))
 
         self.preview_button = ttk.Button(
             self.button_frame,
@@ -74,8 +100,8 @@ class PDFImageExtractorGUI:
         self.extract_button.grid(row=0, column=1, padx=5)
 
         # Log area
-        self.log_frame = ttk.Frame(self.master, padding="10")
-        self.log_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.log_frame = ttk.Frame(self.main_frame, padding="10")
+        self.log_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.log_frame.columnconfigure(0, weight=1)
         self.log_frame.rowconfigure(0, weight=1)
 
@@ -89,48 +115,20 @@ class PDFImageExtractorGUI:
         self.log_text.configure(yscrollcommand=self.scrollbar.set)
 
         # Configure grid weights
-        self.master.columnconfigure(0, weight=1)
-        self.master.rowconfigure(4, weight=1)
+        self.main_frame.columnconfigure(0, weight=1)
+        self.main_frame.rowconfigure(4, weight=1)
 
-        # Add toggleable options
-        self.options_frame = ttk.LabelFrame(self.master, text="Options", padding="10")
-        self.options_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), padx=10, pady=5)
+        # Thumbnail frame (created last and lifted to top)
+        self.thumbnail_frame = ttk.Frame(self.master, padding="10", width=200, height=250)
+        self.thumbnail_frame.place(relx=1.0, rely=0, anchor="ne")
+        self.thumbnail_frame.lift()  # Bring to front
+        self.thumbnail_frame.pack_propagate(False)  # Prevent frame from shrinking
 
-        self.option_vars = {}
-        for i, (option, default) in enumerate(self.extractor.options.items()):
-            var = tk.BooleanVar(value=default)
-            self.option_vars[option] = var
-            ttk.Checkbutton(
-                self.options_frame,
-                text=option.replace('_', ' ').title(),
-                variable=var,
-                command=self.update_options
-            ).grid(row=i, column=0, sticky=tk.W)
+        self.thumbnail_label = ttk.Label(self.thumbnail_frame)
+        self.thumbnail_label.pack()
 
-        # Threshold setting
-        self.threshold_frame = ttk.Frame(self.options_frame)
-        self.threshold_frame.grid(row=len(self.extractor.options), column=0, sticky=(tk.W, tk.E), pady=5)
-
-        self.threshold_label = ttk.Label(self.threshold_frame, text="Threshold (KB):")
-        self.threshold_label.grid(row=0, column=0, sticky=tk.W)
-
-        self.threshold = tk.IntVar(value=0)
-        self.threshold_entry = ttk.Entry(
-            self.threshold_frame, textvariable=self.threshold, width=10
-        )
-        self.threshold_entry.grid(row=0, column=1, padx=5)
-
-        # Move action buttons below the options
-        self.button_frame.grid(row=5, column=0, sticky=(tk.W, tk.E))
-
-        # Move log area below the action buttons
-        self.log_frame.grid(row=6, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-
-        # Adjust grid weights
-        self.master.rowconfigure(5, weight=1)
-
-        # Initial update of options
-        self.update_options()
+        self.thumbnail_image = ttk.Label(self.thumbnail_frame)
+        self.thumbnail_image.pack(expand=True, fill=tk.BOTH)
 
     def update_options(self):
         for option, var in self.option_vars.items():
@@ -164,8 +162,39 @@ class PDFImageExtractorGUI:
                 )
                 self.output_path.set(default_output)
                 self.log(f"Default output folder set to: {default_output}")
+                self.log("----------------------------------------")
+                # Load and display the cover thumbnail
+                self.load_cover_thumbnail(file_path)
+
         except Exception as e:
             self.log(f"Error selecting PDF file: {str(e)}")
+
+    def load_cover_thumbnail(self, pdf_path):
+        try:
+            # Open the PDF and get the first page
+            doc = pymupdf.open(pdf_path)
+            first_page = doc[0]
+
+            # Render the page to a pixmap
+            pix = first_page.get_pixmap(matrix=pymupdf.Matrix(0.2))
+
+            # Convert pixmap to PIL Image
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+            # Resize the image to fit in the GUI
+            img.thumbnail((200, 200))
+
+            # Convert PIL Image to PhotoImage
+            photo = ImageTk.PhotoImage(img)
+
+            # Update the thumbnail label
+            self.thumbnail_image.config(image=photo)
+            self.thumbnail_image.image = photo  # Keep a reference
+
+            doc.close()
+        except Exception as e:
+            self.log(f"Error loading PDF cover: {str(e)}")
+
 
     def browse_output_folder(self):
         """
@@ -211,7 +240,7 @@ class PDFImageExtractorGUI:
             if not self.extractor.output_folder:
                 raise ValueError("Please select an output folder.")
 
-            self.log("----------------------------------------")
+
             self.log("Extracting images with options:")
             for option, value in self.extractor.options.items():
                 self.log(f"- {option.replace('_', ' ').title()}: {value}")
@@ -221,6 +250,8 @@ class PDFImageExtractorGUI:
 
             self.log("----------------------------------------")
             self.log("Extracting images...")
+            # Wait for logging to happen before starting the extraction
+            self.master.update()
             self.extractor.extract_and_save_images()
             self.log("Image extraction completed.")
             self.log(f"Images have been extracted to: {self.extractor.output_folder}")
