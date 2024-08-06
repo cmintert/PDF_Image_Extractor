@@ -11,13 +11,51 @@ class PDFImageExtractorGUI:
     def __init__(self, master):
         self.master = master
         self.master.title("PDF Image Extractor")
-        self.master.geometry("800x650")
+        self.master.geometry("800x725")
 
         self.extractor = PDFImageExtractor()
 
         self.create_widgets()
 
     def create_widgets(self):
+        """
+        Creates and arranges all widgets for the PDF Image Extractor GUI.
+
+        This method sets up the main layout of the application, including:
+        - File selection frame for choosing a PDF file
+        - Output folder selection frame for specifying where extracted images will be saved
+        - Options frame with checkboxes for various extraction settings
+        - Settings frame for adjusting threshold, hash size, and hash threshold
+        - Action buttons for creating thumbnail previews and extracting images
+        - Log area for displaying operation progress and results
+        - Thumbnail frame for showing image previews
+
+        The method uses tkinter and ttk widgets to create a user-friendly interface.
+        It also sets up scrollbars, configures grid weights for responsive layout,
+        and initializes variables for storing user input and preferences.
+
+        Args:
+            self: The instance of the class containing this method.
+
+        Returns:
+            None
+
+        Attributes:
+            main_frame (ttk.Frame): The main container for all widgets.
+            file_frame (ttk.Frame): Frame for PDF file selection.
+            output_frame (ttk.Frame): Frame for output folder selection.
+            options_frame (ttk.LabelFrame): Frame for extraction options.
+            settings_frame (ttk.LabelFrame): Frame for additional settings.
+            button_frame (ttk.Frame): Frame for action buttons.
+            log_frame (ttk.Frame): Frame for the log area.
+            thumbnail_frame (ttk.Frame): Frame for displaying image thumbnails.
+
+        Note:
+            This method should be called during the initialization of the GUI application.
+            It assumes that certain instance variables (e.g., self.master, self.extractor)
+            have been properly initialized before calling this method.
+        """
+
         # Main content frame
         self.main_frame = ttk.Frame(self.master)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
@@ -64,28 +102,40 @@ class PDFImageExtractorGUI:
 
         self.option_vars = {}
         for i, (option, default) in enumerate(self.extractor.options.items()):
-            var = tk.BooleanVar(value=default)
-            self.option_vars[option] = var
-            ttk.Checkbutton(
-                self.options_frame,
-                text=option.replace('_', ' ').title(),
-                variable=var,
-                command=self.update_options
-            ).grid(row=i, column=0, sticky=tk.W)
+            if option not in ["phash_size", "phash_threshold"]:
+                var = tk.BooleanVar(value=default)
+                self.option_vars[option] = var
+                ttk.Checkbutton(
+                    self.options_frame,
+                    text=option.replace('_', ' ').title(),
+                    variable=var,
+                    command=self.update_options
+                ).grid(row=i, column=0, sticky=tk.W)
+
+        # Add the Option settings frame
+        self.settings_frame = ttk.LabelFrame(self.main_frame, text="Option Settings", padding="10")
+        self.settings_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), padx=10, pady=5)
 
         # Threshold setting
-        self.threshold_label = ttk.Label(self.options_frame, text="Threshold (KB):")
-        self.threshold_label.grid(row=len(self.extractor.options), column=0, sticky=tk.W)
-
+        ttk.Label(self.settings_frame, text="Threshold (KB):").grid(row=0, column=0, sticky=tk.W)
         self.threshold = tk.IntVar(value=0)
-        self.threshold_entry = ttk.Entry(
-            self.options_frame, textvariable=self.threshold, width=10
-        )
-        self.threshold_entry.grid(row=len(self.extractor.options), column=1, padx=5)
+        self.threshold_entry = ttk.Entry(self.settings_frame, textvariable=self.threshold, width=10)
+        self.threshold_entry.grid(row=0, column=1, padx=5)
+
+        ttk.Label(self.settings_frame, text="Hash Size:").grid(row=1, column=0, sticky=tk.W)
+        self.phash_size_var = tk.IntVar(value=self.extractor.options['phash_size'])
+        self.phash_size_entry = ttk.Entry(self.settings_frame, textvariable=self.phash_size_var, width=5)
+        self.phash_size_entry.grid(row=1, column=1, padx=5)
+
+        ttk.Label(self.settings_frame, text="Hash Threshold:").grid(row=2, column=0, sticky=tk.W)
+        self.phash_threshold_var = tk.IntVar(value=self.extractor.options['phash_threshold'])
+        self.phash_threshold_entry = ttk.Entry(self.settings_frame, textvariable=self.phash_threshold_var, width=5)
+        self.phash_threshold_entry.grid(row=2, column=1, padx=5)
+
 
         # Action buttons
         self.button_frame = ttk.Frame(self.main_frame, padding="10")
-        self.button_frame.grid(row=3, column=0, sticky=(tk.W, tk.E))
+        self.button_frame.grid(row=4, column=0, sticky=(tk.W, tk.E))
 
         self.preview_button = ttk.Button(
             self.button_frame,
@@ -101,7 +151,7 @@ class PDFImageExtractorGUI:
 
         # Log area
         self.log_frame = ttk.Frame(self.main_frame, padding="10")
-        self.log_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.log_frame.grid(row=5, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.log_frame.columnconfigure(0, weight=1)
         self.log_frame.rowconfigure(0, weight=1)
 
@@ -130,15 +180,68 @@ class PDFImageExtractorGUI:
         self.thumbnail_image = ttk.Label(self.thumbnail_frame)
         self.thumbnail_image.pack(expand=True, fill=tk.BOTH)
 
+        # Adjust grid weights
+        self.main_frame.columnconfigure(0, weight=1)
+        self.main_frame.rowconfigure(5, weight=1)
+
     def update_options(self):
+        """
+        Updates the extractor options based on the current GUI settings.
+
+        This method synchronizes the state of the GUI widgets with the extractor's
+        options. It performs the following actions:
+
+        1. Updates boolean options in the extractor based on checkbox states.
+        2. Updates pHash-related settings (size and threshold) from their respective
+           entry fields.
+        3. Enables or disables the threshold entry field based on the 'use_threshold'
+           option.
+        4. Enables or disables pHash-related entry fields based on the
+           'remove_duplicates' option.
+
+        The method ensures that the extractor's configuration always reflects the
+        current state of the GUI, allowing for dynamic updates of extraction parameters.
+
+        Args:
+            self: The instance of the class containing this method.
+
+        Returns:
+            None
+
+        Attributes modified:
+            self.extractor.options (dict): Updated with new values from GUI widgets.
+
+        GUI elements affected:
+            self.threshold_entry (ttk.Entry): Enabled/disabled based on 'use_threshold'.
+            self.phash_size_entry (ttk.Entry): Enabled/disabled based on 'remove_duplicates'.
+            self.phash_threshold_entry (ttk.Entry): Enabled/disabled based on 'remove_duplicates'.
+
+        Note:
+            This method should be called whenever there's a change in the GUI options,
+            typically in response to user interactions with checkboxes or entry fields.
+            It assumes that self.option_vars, self.extractor, and various ttk.Entry
+            widgets have been properly initialized.
+        """
         for option, var in self.option_vars.items():
             self.extractor.options[option] = var.get()
+
+        # Update pHash settings
+        self.extractor.options['phash_size'] = self.phash_size_var.get()
+        self.extractor.options['phash_threshold'] = self.phash_threshold_var.get()
 
         # Enable/disable threshold entry based on use_threshold option
         if self.extractor.options["use_threshold"]:
             self.threshold_entry.config(state='normal')
         else:
             self.threshold_entry.config(state='disabled')
+
+        # Enable/disable pHash settings based on remove_duplicates option
+        if self.extractor.options["remove_duplicates"]:
+            self.phash_size_entry.config(state='normal')
+            self.phash_threshold_entry.config(state='normal')
+        else:
+            self.phash_size_entry.config(state='disabled')
+            self.phash_threshold_entry.config(state='disabled')
 
     def browse_file(self):
         """
@@ -240,6 +343,7 @@ class PDFImageExtractorGUI:
             if not self.extractor.output_folder:
                 raise ValueError("Please select an output folder.")
 
+            self.update_options()  # Ensure pHash settings are updated
 
             self.log("Extracting images with options:")
             for option, value in self.extractor.options.items():
@@ -283,7 +387,9 @@ class PDFImageExtractor:
         self.current_p_hashes: List = []
         self.options: Dict[str, bool] = {
             "use_threshold": True,
-            "remove_duplicates": True
+            "remove_duplicates": True,
+            "phash_size": 8,  # New option for pHash size
+            "phash_threshold": 5  # New option for pHash comparison threshold
         }
 
     def phash_image(self, image: Image) -> imagehash.ImageHash:
@@ -296,8 +402,23 @@ class PDFImageExtractor:
         Returns:
             str: The pHash value of the image.
         """
-        p_hash = imagehash.phash(image)
+        p_hash = imagehash.phash(image, hash_size=self.options["phash_size"])
         return p_hash
+
+    def is_duplicate(self, new_hash: imagehash.ImageHash) -> bool:
+        """
+        Checks if the new hash is a duplicate based on the current threshold
+
+        Args:
+            new_hash (imagehash.ImageHash): The hash to check for duplicates
+
+        Returns:
+            bool: True if it's a duplicate, False otherwise
+        """
+        for existing_hash in self.current_p_hashes:
+            if (new_hash - existing_hash) <= self.options['phash_threshold']:
+                return True
+        return False
 
     def select_pdf_file(self) -> str:
         """
@@ -349,6 +470,39 @@ class PDFImageExtractor:
             raise RuntimeError(f"Unexpected error extracting images: {str(e)}")
 
         return extracted_images
+
+    def filter_images(self, images: List[Tuple[bytes, float]]) -> List[Tuple[bytes, float]]:
+        """
+        Filters images based on threshold and duplicate settings.
+
+        Args:
+            images (List[Tuple[bytes, float]]): A list of tuples containing image bytes and their sizes in KB.
+
+        Returns:
+            List[Tuple[bytes, float]]: A filtered list of image tuples.
+        """
+        filtered_images = []
+        self.current_p_hashes = []  # Reset pHashes for thumbnail preview
+
+        for image_bytes, size in images:
+            if self.options["use_threshold"] and size < self.threshold:
+                continue
+
+            if self.options["remove_duplicates"]:
+                try:
+                    img = Image.open(io.BytesIO(image_bytes))
+                    img = img.convert("RGB")
+                    hash_to_check = self.phash_image(img)
+                    if self.is_duplicate(hash_to_check):
+                        continue
+                    self.current_p_hashes.append(hash_to_check)
+                except Exception as e:
+                    print(f"Warning: Failed to process image for duplicate check: {str(e)}")
+                    continue
+
+            filtered_images.append((image_bytes, size))
+
+        return filtered_images
 
     def sort_images_by_size(
         self, images: List[Tuple[bytes, float]]
@@ -429,7 +583,7 @@ class PDFImageExtractor:
 
     def create_thumbnail_preview(self):
         """
-        Creates a thumbnail preview of the selected PDF file.
+        Creates a thumbnail preview of the selected PDF file, respecting threshold and duplicate settings.
 
         Raises:
             ValueError: If no PDF file is selected.
@@ -441,7 +595,8 @@ class PDFImageExtractor:
             raise ValueError("No PDF file selected.")
 
         extracted_images = self.extract_images()
-        sorted_images = self.sort_images_by_size(extracted_images)
+        filtered_images = self.filter_images(extracted_images)
+        sorted_images = self.sort_images_by_size(filtered_images)
         return self.create_thumb_sheet(sorted_images)
 
     def extract_and_save_images(self):
@@ -543,7 +698,7 @@ class PDFImageExtractor:
         if self.options["remove_duplicates"]:
             try:
                 hash_to_check = self.phash_image(image)
-                if hash_to_check in self.current_p_hashes:
+                if self.is_duplicate(hash_to_check):
                     print(f"Duplicate image found: {hash_to_check}")
                     return True
                 self.current_p_hashes.append(hash_to_check)
