@@ -2,7 +2,7 @@ import os
 import io
 import tkinter as tk
 from tkinter import ttk, filedialog
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 import pymupdf
 from PIL import Image, ImageDraw, ImageFont
 import imagehash
@@ -11,7 +11,7 @@ class PDFImageExtractorGUI:
     def __init__(self, master):
         self.master = master
         self.master.title("PDF Image Extractor")
-        self.master.geometry("800x600")
+        self.master.geometry("800x650")
 
         self.extractor = PDFImageExtractor()
 
@@ -55,22 +55,11 @@ class PDFImageExtractorGUI:
         )
         self.output_browse_button.grid(row=0, column=2)
 
-        # Threshold setting
-        self.threshold_frame = ttk.Frame(self.master, padding="10")
-        self.threshold_frame.grid(row=2, column=0, sticky=(tk.W, tk.E))
 
-        self.threshold_label = ttk.Label(self.threshold_frame, text="Threshold (KB):")
-        self.threshold_label.grid(row=0, column=0, sticky=tk.W)
-
-        self.threshold = tk.IntVar(value=0)
-        self.threshold_entry = ttk.Entry(
-            self.threshold_frame, textvariable=self.threshold, width=10
-        )
-        self.threshold_entry.grid(row=0, column=1, padx=5)
 
         # Action buttons
         self.button_frame = ttk.Frame(self.master, padding="10")
-        self.button_frame.grid(row=3, column=0, sticky=(tk.W, tk.E))
+        self.button_frame.grid(row=2, column=0, sticky=(tk.W, tk.E))
 
         self.preview_button = ttk.Button(
             self.button_frame,
@@ -86,7 +75,7 @@ class PDFImageExtractorGUI:
 
         # Log area
         self.log_frame = ttk.Frame(self.master, padding="10")
-        self.log_frame.grid(row=4, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.log_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.log_frame.columnconfigure(0, weight=1)
         self.log_frame.rowconfigure(0, weight=1)
 
@@ -102,6 +91,56 @@ class PDFImageExtractorGUI:
         # Configure grid weights
         self.master.columnconfigure(0, weight=1)
         self.master.rowconfigure(4, weight=1)
+
+        # Add toggleable options
+        self.options_frame = ttk.LabelFrame(self.master, text="Options", padding="10")
+        self.options_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), padx=10, pady=5)
+
+        self.option_vars = {}
+        for i, (option, default) in enumerate(self.extractor.options.items()):
+            var = tk.BooleanVar(value=default)
+            self.option_vars[option] = var
+            ttk.Checkbutton(
+                self.options_frame,
+                text=option.replace('_', ' ').title(),
+                variable=var,
+                command=self.update_options
+            ).grid(row=i, column=0, sticky=tk.W)
+
+        # Threshold setting
+        self.threshold_frame = ttk.Frame(self.options_frame)
+        self.threshold_frame.grid(row=len(self.extractor.options), column=0, sticky=(tk.W, tk.E), pady=5)
+
+        self.threshold_label = ttk.Label(self.threshold_frame, text="Threshold (KB):")
+        self.threshold_label.grid(row=0, column=0, sticky=tk.W)
+
+        self.threshold = tk.IntVar(value=0)
+        self.threshold_entry = ttk.Entry(
+            self.threshold_frame, textvariable=self.threshold, width=10
+        )
+        self.threshold_entry.grid(row=0, column=1, padx=5)
+
+        # Move action buttons below the options
+        self.button_frame.grid(row=5, column=0, sticky=(tk.W, tk.E))
+
+        # Move log area below the action buttons
+        self.log_frame.grid(row=6, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        # Adjust grid weights
+        self.master.rowconfigure(5, weight=1)
+
+        # Initial update of options
+        self.update_options()
+
+    def update_options(self):
+        for option, var in self.option_vars.items():
+            self.extractor.options[option] = var.get()
+
+        # Enable/disable threshold entry based on use_threshold option
+        if self.extractor.options["use_threshold"]:
+            self.threshold_entry.config(state='normal')
+        else:
+            self.threshold_entry.config(state='disabled')
 
     def browse_file(self):
         """
@@ -162,36 +201,33 @@ class PDFImageExtractorGUI:
             self.log(f"Error creating thumbnail preview: {str(e)}")
 
     def extract_images(self):
-        """
-        Extracts images from the selected PDF file based on the specified threshold.
-
-        Logs an error message if no PDF file is selected, the threshold is invalid, or an exception occurs during extraction.
-        """
         if not self.file_path.get():
             self.log("Error: Please select a PDF file first.")
-
             return
 
         try:
-            threshold = self.threshold.get()
-            if threshold <= 0:
-                raise ValueError("Threshold must be a positive integer.")
-
-            output_folder = self.output_path.get()
-            if not output_folder:
+            self.extractor.threshold = self.threshold.get() if self.extractor.options["use_threshold"] else 0
+            self.extractor.output_folder = self.output_path.get()
+            if not self.extractor.output_folder:
                 raise ValueError("Please select an output folder.")
 
-            self.extractor.threshold = threshold
-            self.extractor.output_folder = output_folder
-            self.log(f"Extracting images with threshold: {threshold} KB")
-            self.log(f"Output folder: {output_folder}")
+            self.log("----------------------------------------")
+            self.log("Extracting images with options:")
+            for option, value in self.extractor.options.items():
+                self.log(f"- {option.replace('_', ' ').title()}: {value}")
+            if self.extractor.options["use_threshold"]:
+                self.log(f"- Threshold: {self.extractor.threshold} KB")
+            self.log(f"Output folder: {self.extractor.output_folder}")
+
+            self.log("----------------------------------------")
+            self.log("Extracting images...")
             self.extractor.extract_and_save_images()
             self.log("Image extraction completed.")
             self.log(f"Images have been extracted to: {self.extractor.output_folder}")
+            self.log("----------------------------------------")
 
         except ValueError as ve:
             self.log(f"Error: {str(ve)}")
-
         except Exception as e:
             self.log(f"Error extracting images: {str(e)}")
 
@@ -214,6 +250,10 @@ class PDFImageExtractor:
         self.output_folder = ""
         self.threshold = 0
         self.current_p_hashes: List = []
+        self.options: Dict[str, bool] = {
+            "use_threshold": True,
+            "remove_duplicates": True
+        }
 
     def phash_image(self, image: Image) -> imagehash.ImageHash:
         """
@@ -457,6 +497,7 @@ class PDFImageExtractor:
     def check_conditions(self, img_size: int, image:Image.Image) -> bool:
         """
         Checks if the image size is less than the threshold or if the image is a duplicate.
+        Respects the options set by the user.
 
         Args:
             img_size (int): The size of the image in KB.
@@ -465,18 +506,20 @@ class PDFImageExtractor:
         Returns:
             bool: True if the image should be skipped, False otherwise.
         """
-        if img_size < self.threshold:
+        if self.options["use_threshold"] and img_size < self.threshold:
             return True
 
-        try:
-            hash_to_check = self.phash_image(image)
-            if hash_to_check in self.current_p_hashes:
-                print(f"Duplicate image found: {hash_to_check}")
-                return True
-            self.current_p_hashes.append(hash_to_check)
-            return False
-        except Exception as e:
-            raise RuntimeError(f"Failed to hash image: {str(e)}")
+        if self.options["remove_duplicates"]:
+            try:
+                hash_to_check = self.phash_image(image)
+                if hash_to_check in self.current_p_hashes:
+                    print(f"Duplicate image found: {hash_to_check}")
+                    return True
+                self.current_p_hashes.append(hash_to_check)
+            except Exception as e:
+                raise RuntimeError(f"Failed to hash image: {str(e)}")
+
+        return False
 
     def save_image(
         self,
