@@ -5,7 +5,7 @@ from tkinter import ttk, filedialog
 from typing import List, Tuple
 import pymupdf
 from PIL import Image, ImageDraw, ImageFont
-
+import imagehash
 
 class PDFImageExtractorGUI:
     def __init__(self, master):
@@ -213,6 +213,20 @@ class PDFImageExtractor:
         self.pdf_name = ""
         self.output_folder = ""
         self.threshold = 0
+        self.current_pHashes: List = []
+
+    def phash_image(self, image: Image) -> imagehash.ImageHash:
+        """
+        Calculates the pHash value
+
+        Args:
+            image (Image.Image): The image to calculate the pHash for.
+
+        Returns:
+            str: The pHash value of the image.
+        """
+        pHash = imagehash.phash(image)
+        return pHash
 
     def select_pdf_file(self) -> str:
         """
@@ -374,6 +388,8 @@ class PDFImageExtractor:
         if not self.output_folder:
             raise ValueError("No output folder specified.")
 
+        self.current_pHashes = [] # Reset the current pHashes
+
         try:
             os.makedirs(self.output_folder, exist_ok=True)
         except OSError as e:
@@ -414,7 +430,7 @@ class PDFImageExtractor:
         self, doc: pymupdf.Document, page_index: int, image_index: int, img: Tuple
     ):
         """
-        Processes an image from a PDF page if it is larger than a threshold.
+        Processes an image from a PDF page if it is larger than a threshold. It also checks if the image is a duplicate.
 
         Args:
             doc (pymupdf.Document): The PDF document object.
@@ -429,13 +445,38 @@ class PDFImageExtractor:
         try:
             image_bytes = doc.extract_image(xref)["image"]
             img_size = len(image_bytes) / 1024
+            pil_image = Image.open(io.BytesIO(image_bytes))
 
-            if img_size < self.threshold:
+            if self.check_conditions(img_size, pil_image):
                 return
 
             self.save_image(doc, xref, smask, page_index, image_index)
         except Exception as e:
             raise RuntimeError(f"Failed to process image: {str(e)}")
+
+    def check_conditions(self, img_size: int, image:Image.Image) -> bool:
+        """
+        Checks if the image size is less than the threshold or if the image is a duplicate.
+
+        Args:
+            img_size (int): The size of the image in KB.
+            image (Image.Image): The image to check for duplicates.
+
+        Returns:
+            bool: True if the image should be skipped, False otherwise.
+        """
+        if img_size < self.threshold:
+            return True
+
+        try:
+            hash_to_check = self.phash_image(image)
+            if hash_to_check in self.current_pHashes:
+                print(f"Duplicate image found: {hash_to_check}")
+                return True
+            self.current_pHashes.append(hash_to_check)
+            return False
+        except Exception as e:
+            raise RuntimeError(f"Failed to hash image: {str(e)}")
 
     def save_image(
         self,
