@@ -49,11 +49,6 @@ class PDFImageExtractorGUI:
             button_frame (ttk.Frame): Frame for action buttons.
             log_frame (ttk.Frame): Frame for the log area.
             thumbnail_frame (ttk.Frame): Frame for displaying image thumbnails.
-
-        Note:
-            This method should be called during the initialization of the GUI application.
-            It assumes that certain instance variables (e.g., self.master, self.extractor)
-            have been properly initialized before calling this method.
         """
 
         # Main content frame
