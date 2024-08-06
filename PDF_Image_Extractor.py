@@ -213,7 +213,7 @@ class PDFImageExtractor:
         self.pdf_name = ""
         self.output_folder = ""
         self.threshold = 0
-        self.current_pHashes: List = []
+        self.current_p_hashes: List = []
 
     def phash_image(self, image: Image) -> imagehash.ImageHash:
         """
@@ -225,8 +225,8 @@ class PDFImageExtractor:
         Returns:
             str: The pHash value of the image.
         """
-        pHash = imagehash.phash(image)
-        return pHash
+        p_hash = imagehash.phash(image)
+        return p_hash
 
     def select_pdf_file(self) -> str:
         """
@@ -388,7 +388,7 @@ class PDFImageExtractor:
         if not self.output_folder:
             raise ValueError("No output folder specified.")
 
-        self.current_pHashes = [] # Reset the current pHashes
+        self.current_p_hashes = [] # Reset the current pHashes
 
         try:
             os.makedirs(self.output_folder, exist_ok=True)
@@ -470,10 +470,10 @@ class PDFImageExtractor:
 
         try:
             hash_to_check = self.phash_image(image)
-            if hash_to_check in self.current_pHashes:
+            if hash_to_check in self.current_p_hashes:
                 print(f"Duplicate image found: {hash_to_check}")
                 return True
-            self.current_pHashes.append(hash_to_check)
+            self.current_p_hashes.append(hash_to_check)
             return False
         except Exception as e:
             raise RuntimeError(f"Failed to hash image: {str(e)}")
