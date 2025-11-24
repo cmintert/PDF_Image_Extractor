@@ -249,8 +249,9 @@ class PDFImageExtractorGUI:
         """
 
         try:
-            file_path = self.extractor.select_pdf_file()
+            file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
             if file_path:
+                self.extractor.set_pdf_file(file_path)
                 self.file_path.set(file_path)
                 self.log("PDF file selected: " + file_path)
                 # Set default output folder
@@ -351,7 +352,7 @@ class PDFImageExtractorGUI:
             self.log("Extracting images...")
             # Wait for logging to happen before starting the extraction
             self.master.update()
-            self.extractor.extract_and_save_images()
+            self.extractor.extract_and_save_images(log_callback=self.log)
             self.log("Image extraction completed.")
             self.log(f"Images have been extracted to: {self.extractor.output_folder}")
             self.log("----------------------------------------")
@@ -415,25 +416,24 @@ class PDFImageExtractor:
                 return True
         return False
 
-    def select_pdf_file(self) -> str:
+    def set_pdf_file(self, pdf_path: str):
         """
-        Opens a file dialog for the user to select a PDF file.
+        Sets the PDF file path and updates related attributes.
 
-        If a valid file is selected, updates the PDF path, directory, and name.
-        Raises a FileNotFoundError if the selected file does not exist.
+        Args:
+            pdf_path (str): The path to the PDF file.
 
-        Returns:
-            str: The path of the selected PDF file.
+        Raises:
+            FileNotFoundError: If the file does not exist.
         """
-        self.pdf_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
-        if self.pdf_path:
-            if not os.path.isfile(self.pdf_path):
+        if pdf_path:
+            if not os.path.isfile(pdf_path):
                 raise FileNotFoundError(
-                    f"The selected file does not exist: {self.pdf_path}"
+                    f"The selected file does not exist: {pdf_path}"
                 )
+            self.pdf_path = pdf_path
             self.pdf_directory = os.path.dirname(self.pdf_path)
             self.pdf_name = os.path.basename(self.pdf_path)
-        return self.pdf_path
 
     def extract_images(self) -> List[Tuple[bytes, float]]:
         """
@@ -466,12 +466,13 @@ class PDFImageExtractor:
 
         return extracted_images
 
-    def filter_images(self, images: List[Tuple[bytes, float]]) -> List[Tuple[bytes, float]]:
+    def filter_images(self, images: List[Tuple[bytes, float]], log_callback=None) -> List[Tuple[bytes, float]]:
         """
         Filters images based on threshold and duplicate settings.
 
         Args:
             images (List[Tuple[bytes, float]]): A list of tuples containing image bytes and their sizes in KB.
+            log_callback (callable, optional): A function to log messages.
 
         Returns:
             List[Tuple[bytes, float]]: A filtered list of image tuples.
@@ -492,7 +493,11 @@ class PDFImageExtractor:
                         continue
                     self.current_p_hashes.append(hash_to_check)
                 except Exception as e:
-                    print(f"Warning: Failed to process image for duplicate check: {str(e)}")
+                    msg = f"Warning: Failed to process image for duplicate check: {str(e)}"
+                    if log_callback:
+                        log_callback(msg)
+                    else:
+                        print(msg)
                     continue
 
             filtered_images.append((image_bytes, size))
@@ -500,13 +505,14 @@ class PDFImageExtractor:
         return filtered_images
 
     def sort_images_by_size(
-        self, images: List[Tuple[bytes, float]]
+        self, images: List[Tuple[bytes, float]], log_callback=None
     ) -> List[Tuple[Image.Image, float]]:
         """
         Sorts images by size in descending order and creates thumbnails.
 
         Args:
             images (List[Tuple[bytes, float]]): A list of tuples containing image bytes and their sizes in KB.
+            log_callback (callable, optional): A function to log messages.
 
         Returns:
             List[Tuple[Image.Image, float]]: A list of tuples containing thumbnail images and their sizes in KB.
@@ -520,9 +526,17 @@ class PDFImageExtractor:
                 img.thumbnail((100, 100))  # Creating a thumbnail
                 thumbnails.append((img, size))
             except OSError as e:
-                print(f"Warning: Failed to process an image: {str(e)}")
+                msg = f"Warning: Failed to process an image: {str(e)}"
+                if log_callback:
+                    log_callback(msg)
+                else:
+                    print(msg)
             except Exception as e:
-                print(f"Unexpected error processing an image: {str(e)}")
+                msg = f"Unexpected error processing an image: {str(e)}"
+                if log_callback:
+                    log_callback(msg)
+                else:
+                    print(msg)
         return thumbnails
 
     def create_thumb_sheet(self, images: List[Tuple[Image.Image, float]]) -> str:
@@ -576,9 +590,12 @@ class PDFImageExtractor:
             raise IOError(f"Failed to save thumbnail sheet: {str(e)}")
         return thumbnail_sheet_path
 
-    def create_thumbnail_preview(self):
+    def create_thumbnail_preview(self, log_callback=None):
         """
         Creates a thumbnail preview of the selected PDF file, respecting threshold and duplicate settings.
+
+        Args:
+            log_callback (callable, optional): A function to log messages.
 
         Raises:
             ValueError: If no PDF file is selected.
@@ -590,13 +607,16 @@ class PDFImageExtractor:
             raise ValueError("No PDF file selected.")
 
         extracted_images = self.extract_images()
-        filtered_images = self.filter_images(extracted_images)
-        sorted_images = self.sort_images_by_size(filtered_images)
+        filtered_images = self.filter_images(extracted_images, log_callback)
+        sorted_images = self.sort_images_by_size(filtered_images, log_callback)
         return self.create_thumb_sheet(sorted_images)
 
-    def extract_and_save_images(self):
+    def extract_and_save_images(self, log_callback=None):
         """
         Extracts and saves images from the selected PDF file.
+
+        Args:
+            log_callback (callable, optional): A function to log messages.
 
         Raises:
             ValueError: If no PDF file is selected or no output folder is specified.
@@ -619,19 +639,20 @@ class PDFImageExtractor:
         try:
             with pymupdf.open(self.pdf_path) as doc:
                 for page_index in range(len(doc)):
-                    self.process_page(doc, page_index)
+                    self.process_page(doc, page_index, log_callback)
         except pymupdf.fitz.FileDataError as e:
             raise ValueError(f"Error reading PDF file: {str(e)}")
         except Exception as e:
             raise RuntimeError(f"Unexpected error processing PDF: {str(e)}")
 
-    def process_page(self, doc: pymupdf.Document, page_index: int):
+    def process_page(self, doc: pymupdf.Document, page_index: int, log_callback=None):
         """
         Processes a page of the PDF to extract and handle images.
 
         Args:
             doc (pymupdf.Document): The PDF document object.
             page_index (int): The index of the page to process.
+            log_callback (callable, optional): A function to log messages.
 
         Raises:
             RuntimeError: If an error occurs while processing an image.
@@ -641,14 +662,16 @@ class PDFImageExtractor:
 
         for image_index, img in enumerate(image_list, start=1):
             try:
-                self.process_image(doc, page_index, image_index, img)
+                self.process_image(doc, page_index, image_index, img, log_callback)
             except Exception as e:
-                print(
-                    f"Warning: Failed to process image {image_index} on page {page_index}: {str(e)}"
-                )
+                msg = f"Warning: Failed to process image {image_index} on page {page_index}: {str(e)}"
+                if log_callback:
+                    log_callback(msg)
+                else:
+                    print(msg)
 
     def process_image(
-        self, doc: pymupdf.Document, page_index: int, image_index: int, img: Tuple
+        self, doc: pymupdf.Document, page_index: int, image_index: int, img: Tuple, log_callback=None
     ):
         """
         Processes an image from a PDF page if it is larger than a threshold. It also checks if the image is a duplicate.
@@ -658,6 +681,7 @@ class PDFImageExtractor:
             page_index (int): The index of the page containing the image.
             image_index (int): The index of the image on the page.
             img (Tuple): A tuple containing image reference and smask.
+            log_callback (callable, optional): A function to log messages.
 
         Raises:
             RuntimeError: If an error occurs while processing the image.
@@ -668,14 +692,14 @@ class PDFImageExtractor:
             img_size = len(image_bytes) / 1024
             pil_image = Image.open(io.BytesIO(image_bytes))
 
-            if self.check_conditions(img_size, pil_image):
+            if self.check_conditions(img_size, pil_image, log_callback):
                 return
 
             self.save_image(doc, xref, smask, page_index, image_index)
         except Exception as e:
             raise RuntimeError(f"Failed to process image: {str(e)}")
 
-    def check_conditions(self, img_size: int, image:Image.Image) -> bool:
+    def check_conditions(self, img_size: int, image:Image.Image, log_callback=None) -> bool:
         """
         Checks if the image size is less than the threshold or if the image is a duplicate.
         Respects the options set by the user.
@@ -683,6 +707,7 @@ class PDFImageExtractor:
         Args:
             img_size (int): The size of the image in KB.
             image (Image.Image): The image to check for duplicates.
+            log_callback (callable, optional): A function to log messages.
 
         Returns:
             bool: True if the image should be skipped, False otherwise.
@@ -694,7 +719,11 @@ class PDFImageExtractor:
             try:
                 hash_to_check = self.phash_image(image)
                 if self.is_duplicate(hash_to_check):
-                    print(f"Duplicate image found: {hash_to_check}")
+                    msg = f"Duplicate image found: {hash_to_check}"
+                    if log_callback:
+                        log_callback(msg)
+                    else:
+                        print(msg)
                     return True
                 self.current_p_hashes.append(hash_to_check)
             except Exception as e:
